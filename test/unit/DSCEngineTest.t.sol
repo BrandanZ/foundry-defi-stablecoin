@@ -34,9 +34,31 @@ contract DSCEngineTest is Test {
         ERC20Mock(weth).mint(USER, STARTING_ERC20_BALANCE);
     }
 
+    ///////////////////////
+    // Constructor Tests  //
+    ////////////////////////
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+
+    function testRevertsIfTokenLengthDoesntMatchPriceFeeds() public {
+        tokenAddresses.push(weth);
+        priceFeedAddresses.push(ethUsdPriceFeed);
+        priceFeedAddresses.push(btcUsdPriceFeed);
+
+        vm.expectRevert(DSCEngine.DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength.selector);
+        new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
+    }
+
     //////////////////
     // Price Tests  //
     //////////////////
+    function testGetTokenAmountFromUsd() public {
+        // If we want $100 of WETH @ $2000/WETH, that would be 0.05 WETH
+        uint256 expectedWeth = 0.05 ether;
+        uint256 amountWeth = dsce.getTokenAmountFromUsd(weth, 100 ether);
+        assertEq(amountWeth, expectedWeth);
+    }
+
     function testGetUsdValue() public {
         uint256 ethAmount = 15e18;
         // 15e18 ETH * $2000/ETH = $30,000e18
@@ -56,5 +78,31 @@ contract DSCEngineTest is Test {
         vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
         dsce.depositCollateral(weth, 0);
         vm.stopPrank();
+    }
+
+    function testRevertsWithUnapprovedCollateral() public {
+        ERC20Mock ranToken = new ERC20Mock("RAN", "RAN", USER, AMOUNT_COLLATERAL);
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__NotAllowedToken.selector);
+        dsce.depositCollateral(address(ranToken), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+    modifier depositedCollateral() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+
+    function testCanDepositCollateralAndGetAccountInfo() public depositedCollateral {
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(USER);
+
+        uint256 expectedTotalDscMinted = 0;
+        uint256 expectedDepositAmount = dsce.getTokenAmountFromUsd(weth, collateralValueInUsd);
+
+        assertEq(totalDscMinted, expectedTotalDscMinted);
+        assertEq(AMOUNT_COLLATERAL, expectedDepositAmount);
     }
 }
