@@ -9,3 +9,7 @@
    2. wBTC
 
 4. What are our invariants/properties?
+
+5. Some proper Oracle use
+6. Write more tests
+7. Smart Contract Audit Preparation
